@@ -31,7 +31,8 @@ Live Demo → https://cinevora.netlify.app/
 
 ## 📸 Preview
 
-![Cinevora Screenshot](./screenshot.png)
+![Cinevora Screenshot](./Screenshot.png)
+![Cinevora Screenshot](./Screenshott.png)
 
 
 ---
