@@ -2,7 +2,7 @@
 
 A modern movie discovery web application built using **React**, **Vite**, **Tailwind CSS**, **TMDB API**, and **Appwrite**.
 
-Live Demo → https://cinevora.netlify.app/
+Live Demo → [https://cinevora-movies.vercel.app/]
 
 ---
 
