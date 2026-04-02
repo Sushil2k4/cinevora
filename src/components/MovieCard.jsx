@@ -20,6 +20,8 @@ const MovieCard = ({ movie }) => {
             : `/no-movie.png`
         }
         alt={title}
+        loading="lazy"
+        decoding="async"
       />
 
       <div className="mt-4">

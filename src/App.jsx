@@ -9,6 +9,7 @@ const API_BASE_URL = 'https://api.themoviedb.org/3';
 
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 console.log('ENV TOKEN:', import.meta.env.VITE_TMDB_API_KEY);
+const REQUEST_TIMEOUT_MS = 8000;
 
 
 
@@ -17,12 +18,37 @@ const App = () => {
   const [movieList, setMovieList] = useState([]);
   const [trendingMovies, setTrendingMovies] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [trendingLoading, setTrendingLoading] = useState(false);
   const [moviesError, setMoviesError] = useState('');
   const [trendingError, setTrendingError] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const latestRequestRef = useRef(0);
+  const moviesAbortRef = useRef(null);
+  const trendingAbortRef = useRef(null);
+  const lastMovieQueryRef = useRef('');
+  const isMountedRef = useRef(true);
 
-  const fetchTmdb = async (path, query = {}) => {
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      moviesAbortRef.current?.abort();
+      trendingAbortRef.current?.abort();
+    };
+  }, []);
+
+  const createTimedRequest = () => {
+    const controller = new AbortController();
+    let didTimeout = false;
+
+    const timeoutId = window.setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
+    return { controller, timeoutId, didTimeoutRef: () => didTimeout };
+  };
+
+  const fetchTmdb = async (path, query = {}, signal) => {
     const searchParams = new URLSearchParams();
 
     Object.entries(query).forEach(([key, value]) => {
@@ -37,6 +63,7 @@ const App = () => {
         accept: 'application/json',
         Authorization: `Bearer ${API_KEY}`,
       },
+      signal,
     };
 
     if (!API_KEY) {
@@ -80,17 +107,23 @@ const App = () => {
   );
   const fetchMovies = async (query = '') => {
     const requestId = ++latestRequestRef.current;
+    moviesAbortRef.current?.abort();
+    const { controller, timeoutId, didTimeoutRef } = createTimedRequest();
+    moviesAbortRef.current = controller;
+    lastMovieQueryRef.current = query;
     setIsLoading(true);
     setMoviesError('');
+    console.log(`[Movies] start request (query="${query}")`);
     try {
       const data = query
-        ? await fetchTmdb('/search/movie', { query })
-        : await fetchTmdb('/discover/movie', { sort_by: 'popularity.desc' });
+        ? await fetchTmdb('/search/movie', { query }, controller.signal)
+        : await fetchTmdb('/discover/movie', { sort_by: 'popularity.desc' }, controller.signal);
       const results = Array.isArray(data?.results) ? data.results : [];
 
       if (requestId !== latestRequestRef.current) return;
 
       setMovieList(results);
+      console.log(`[Movies] success: ${results.length} items`);
 
       if (query && results.length > 0) {
         try {
@@ -103,19 +136,33 @@ const App = () => {
     } catch (error) {
       if (requestId !== latestRequestRef.current) return;
 
-      console.error('Error fetching movies:', error);
-      setMovieList([]);
-      setMoviesError('Could not load movies right now. Please try again in a moment.');
+      const timedOut = didTimeoutRef();
+      console.error('[Movies] fetch failed:', error);
+      if (timedOut) {
+        setMoviesError('The request timed out on a slow network. Please retry.');
+      } else if (error?.name === 'AbortError') {
+        setMoviesError('The request was canceled. Please retry.');
+      } else {
+        setMoviesError('Could not load movies right now. Please try again in a moment.');
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       if (requestId !== latestRequestRef.current) return;
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 
   const loadTrendingMovies = async () => {
+    trendingAbortRef.current?.abort();
+    const { controller, timeoutId, didTimeoutRef } = createTimedRequest();
+    trendingAbortRef.current = controller;
+    setTrendingLoading(true);
     setTrendingError('');
+    console.log('[Trending] start request');
     try {
-      const data = await fetchTmdb('/trending/movie/day');
+      const data = await fetchTmdb('/trending/movie/day', {}, controller.signal);
       const results = Array.isArray(data?.results) ? data.results : [];
 
       console.log('[Trending] raw response:', data);
@@ -123,12 +170,33 @@ const App = () => {
 
       // TMDB response shape is { results: [...] }.
       setTrendingMovies(results);
+      console.log(`[Trending] success: ${results.length} items`);
     } catch (error) {
-      console.error('Error fetching trending movies:', error);
-      setTrendingMovies([]);
-      setTrendingError('Trending movies are temporarily unavailable.');
+      const timedOut = didTimeoutRef();
+      console.error('[Trending] fetch failed:', error);
+      if (timedOut) {
+        setTrendingError('Trending movies took too long to load. Please retry.');
+      } else if (error?.name === 'AbortError') {
+        setTrendingError('Trending request was canceled. Please retry.');
+      } else {
+        setTrendingError('Trending movies are temporarily unavailable.');
+      }
+    }
+    finally {
+      window.clearTimeout(timeoutId);
+      if (isMountedRef.current) {
+        setTrendingLoading(false);
+      }
     }
   }
+
+  const handleRetryMovies = () => {
+    fetchMovies(lastMovieQueryRef.current);
+  };
+
+  const handleRetryTrending = () => {
+    loadTrendingMovies();
+  };
 
   useEffect(() => {
   fetchMovies(debouncedSearchTerm);
@@ -186,28 +254,59 @@ const App = () => {
           </section>
         )}
 
+        {trendingLoading && (
+          <p className="text-light-200 mb-4">Loading trending movies...</p>
+        )}
+
         {trendingError && (
-          <p className="text-light-200 mb-4">{trendingError}</p>
+          <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">
+            <p>{trendingError}</p>
+            <button
+              type="button"
+              onClick={handleRetryTrending}
+              className="mt-3 inline-flex items-center rounded-full border border-red-300/30 px-4 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/20"
+            >
+              Retry
+            </button>
+          </div>
         )}
 
         <section className="all-movies">
           <h2>All Movies</h2>
 
-          {isLoading ? (
-            <Spinner />
-          ) : moviesError ? (
-            <p className="text-red-500">{moviesError}</p>
-          ) : (
-            movieList?.length > 0 ? (
-              <ul>
-                {movieList?.map((movie, index) => (
-                  <MovieCard key={movie?.id ?? `movie-${index}`} movie={movie} />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-light-200">No movies found.</p>
-            )
+          {isLoading && movieList.length === 0 && (
+            <div className="space-y-3">
+              <p className="text-light-200">Loading movies… please wait.</p>
+              <Spinner />
+            </div>
           )}
+
+          {moviesError && (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">
+              <p>{moviesError}</p>
+              <button
+                type="button"
+                onClick={handleRetryMovies}
+                className="mt-3 inline-flex items-center rounded-full border border-red-300/30 px-4 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/20"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {isLoading && movieList.length > 0 && (
+            <p className="mb-4 text-light-200">Refreshing movies… showing the last available results.</p>
+          )}
+
+          {movieList?.length > 0 ? (
+            <ul>
+              {movieList?.map((movie, index) => (
+                <MovieCard key={movie?.id ?? `movie-${index}`} movie={movie} />
+              ))}
+            </ul>
+          ) : !isLoading && !moviesError ? (
+            <p className="text-light-200">No movies found.</p>
+          ) : null}
         </section>
       </div>
 
