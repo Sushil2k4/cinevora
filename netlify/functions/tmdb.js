@@ -31,7 +31,6 @@ export const handler = async (event) => {
   }
 
   params.delete('path');
-  params.set('api_key', key);
 
   const endpoint = `${TMDB_BASE_URL}${path}?${params.toString()}`;
 
@@ -39,9 +38,14 @@ export const handler = async (event) => {
     const response = await fetch(endpoint, {
       method: 'GET',
       headers: {
+        Authorization: `Bearer ${key}`,
         Accept: 'application/json',
       },
     });
+
+    if (response.status !== 200) {
+      console.error(`[TMDB proxy] Non-200 status ${response.status} for ${path}`);
+    }
 
     const body = await response.text();
 

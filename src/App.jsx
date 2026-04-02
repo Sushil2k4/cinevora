@@ -32,6 +32,14 @@ const App = () => {
       }
     });
 
+    const options = {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+        Authorization: `Bearer ${API_KEY}`,
+      },
+    };
+
     let endpoint = '';
 
     if (isProd) {
@@ -41,12 +49,11 @@ const App = () => {
       if (!API_KEY) {
         throw new Error('VITE_TMDB_API_KEY is missing in local environment.');
       }
-      searchParams.set('api_key', API_KEY);
       endpoint = `${API_BASE_URL}${path}?${searchParams.toString()}`;
     }
 
     console.log(`[TMDB] Request -> ${endpoint}`);
-    const response = await fetch(endpoint);
+    const response = await fetch(endpoint, options);
     const responseText = await response.text();
 
     let data = null;
@@ -57,6 +64,10 @@ const App = () => {
     }
 
     console.log(`[TMDB] Response status ${response.status} for ${path}`);
+
+    if (response.status !== 200) {
+      console.error(`[TMDB] Non-200 status ${response.status} for ${path}`);
+    }
 
     if (!response.ok) {
       console.error('[TMDB] Failed response body:', data || responseText);
