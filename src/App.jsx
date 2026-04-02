@@ -6,9 +6,9 @@ import { useDebounce } from 'react-use'
 import { updateSearchCount } from './appwrite.js';
 
 const API_BASE_URL = 'https://api.themoviedb.org/3';
-const TMDB_PROXY_PATH = '/.netlify/functions/tmdb';
 
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
+console.log('ENV TOKEN:', import.meta.env.VITE_TMDB_API_KEY);
 
 
 
@@ -23,7 +23,6 @@ const App = () => {
   const latestRequestRef = useRef(0);
 
   const fetchTmdb = async (path, query = {}) => {
-    const isProd = import.meta.env.PROD;
     const searchParams = new URLSearchParams();
 
     Object.entries(query).forEach(([key, value]) => {
@@ -40,17 +39,11 @@ const App = () => {
       },
     };
 
-    let endpoint = '';
-
-    if (isProd) {
-      searchParams.set('path', path);
-      endpoint = `${TMDB_PROXY_PATH}?${searchParams.toString()}`;
-    } else {
-      if (!API_KEY) {
-        throw new Error('VITE_TMDB_API_KEY is missing in local environment.');
-      }
-      endpoint = `${API_BASE_URL}${path}?${searchParams.toString()}`;
+    if (!API_KEY) {
+      throw new Error('VITE_TMDB_API_KEY is missing. Set it in Vercel Project Settings > Environment Variables and redeploy.');
     }
+
+    const endpoint = `${API_BASE_URL}${path}?${searchParams.toString()}`;
 
     console.log(`[TMDB] Request -> ${endpoint}`);
     const response = await fetch(endpoint, options);
@@ -64,6 +57,7 @@ const App = () => {
     }
 
     console.log(`[TMDB] Response status ${response.status} for ${path}`);
+    console.log('[TMDB] Response data:', data || responseText);
 
     if (response.status !== 200) {
       console.error(`[TMDB] Non-200 status ${response.status} for ${path}`);

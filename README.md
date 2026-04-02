@@ -60,19 +60,19 @@ npm install
 ## Create a .env.local file in the root directory and add:
 
 ```bash
-VITE_TMDB_API_KEY=your_tmdb_api_key
+VITE_TMDB_API_KEY=your_tmdb_read_access_token_v4
 VITE_APPWRITE_PROJECT_ID=your_project_id
 VITE_APPWRITE_DATABASE_ID=your_database_id
 VITE_APPWRITE_COLLECTION_ID=your_collection_id
 ```
 
-For Netlify production deploys, add this server-side environment variable in Netlify Site Settings:
+For Vercel production deploys, add this environment variable in Project Settings > Environment Variables:
 
 ```bash
-TMDB_API_KEY=your_tmdb_api_key
+VITE_TMDB_API_KEY=your_tmdb_read_access_token_v4
 ```
 
-The app uses a Netlify function (`netlify/functions/tmdb.js`) in production, so TMDB requests are proxied server-side.
+The app now calls TMDB directly from the client using the Bearer token header, so the Vercel build must be redeployed after setting the variable.
 
 ## Start development server:
 
