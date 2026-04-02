@@ -5,6 +5,9 @@ const MovieCard = ({ movie }) => {
 
   const title = movie?.title || 'Untitled';
   const posterPath = movie?.poster_path;
+  const posterSrc = posterPath
+    ? `/api/poster?path=${encodeURIComponent(`/t/p/w500/${posterPath}`)}`
+    : '/no-movie.png';
   const rating = Number.isFinite(movie?.vote_average)
     ? movie.vote_average.toFixed(1)
     : 'N/A';
@@ -14,14 +17,14 @@ const MovieCard = ({ movie }) => {
   return (
     <div className="movie-card">
       <img
-        src={
-          posterPath
-            ? `https://image.tmdb.org/t/p/w500/${posterPath}`
-            : `/no-movie.png`
-        }
+        src={posterSrc}
         alt={title}
         loading="lazy"
         decoding="async"
+        onError={(event) => {
+          event.currentTarget.onerror = null;
+          event.currentTarget.src = '/no-movie.png';
+        }}
       />
 
       <div className="mt-4">

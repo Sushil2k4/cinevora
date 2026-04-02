@@ -2,15 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import Search from './components/Search.jsx';
 import Spinner from './components/Spinner.jsx';
 import MovieCard from './components/MovieCard.jsx';
-import { useDebounce } from 'react-use'
+import { useDebounce } from 'react-use';
 import { updateSearchCount } from './appwrite.js';
 
-const API_BASE_URL = 'https://api.themoviedb.org/3';
-
-const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
-console.log('ENV TOKEN:', import.meta.env.VITE_TMDB_API_KEY);
 const REQUEST_TIMEOUT_MS = 8000;
-const DEBUG_HARDCODED_BEARER_TOKEN = 'Bearer YOUR_TOKEN';
+const buildPosterSrc = (posterPath) =>
+  posterPath
+    ? `/api/poster?path=${encodeURIComponent(`/t/p/w500/${posterPath}`)}`
+    : '/no-movie.png';
 
 
 
@@ -49,9 +48,8 @@ const App = () => {
     return { controller, timeoutId, didTimeoutRef: () => didTimeout };
   };
 
-  const fetchTmdb = async (path, query = {}, signal) => {
+  const fetchApi = async (path, query = {}, signal) => {
     const searchParams = new URLSearchParams();
-    const authToken = API_KEY || DEBUG_HARDCODED_BEARER_TOKEN.replace(/^Bearer\s+/i, '');
 
     Object.entries(query).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
@@ -61,20 +59,12 @@ const App = () => {
 
     const options = {
       method: 'GET',
-      headers: {
-        accept: 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
       signal,
     };
 
-    if (!API_KEY) {
-      console.warn('[TMDB] VITE_TMDB_API_KEY is missing; using DEBUG_HARDCODED_BEARER_TOKEN fallback for this request.');
-    }
+    const endpoint = searchParams.toString() ? `${path}?${searchParams.toString()}` : path;
 
-    const endpoint = `${API_BASE_URL}${path}?${searchParams.toString()}`;
-
-    console.log(`[TMDB] Request -> ${endpoint}`);
+    console.log(`[API] Request -> ${endpoint}`);
     const response = await fetch(endpoint, options);
     const responseText = await response.text();
 
@@ -85,17 +75,17 @@ const App = () => {
       data = null;
     }
 
-    console.log(`[TMDB] Response status ${response.status} for ${path}`);
-    console.log('[TMDB] Response data:', data || responseText);
+    console.log(`[API] Response status ${response.status} for ${path}`);
+    console.log('[API] Response data:', data || responseText);
 
     if (response.status !== 200) {
-      console.error(`[TMDB] Non-200 status ${response.status} for ${path}`);
+      console.error(`[API] Non-200 status ${response.status} for ${path}`);
     }
 
     if (!response.ok) {
-      console.error('[TMDB] Failed response body:', data || responseText);
+      console.error('[API] Failed response body:', data || responseText);
       throw new Error(
-        `${path} failed with status ${response.status}${data?.status_message ? `: ${data.status_message}` : ''}`
+        `${path} failed with status ${response.status}${data?.error ? `: ${data.error}` : data?.status_message ? `: ${data.status_message}` : ''}`
       );
     }
 
@@ -120,8 +110,8 @@ const App = () => {
     console.log(`[Movies] start request (query="${query}")`);
     try {
       const data = query
-        ? await fetchTmdb('/search/movie', { query }, controller.signal)
-        : await fetchTmdb('/movie/popular', {}, controller.signal);
+        ? await fetchApi('/api/movies', { query }, controller.signal)
+        : await fetchApi('/api/movies', {}, controller.signal);
       const results = Array.isArray(data?.results) ? data.results : [];
 
       if (requestId !== latestRequestRef.current) return;
@@ -143,9 +133,9 @@ const App = () => {
       const timedOut = didTimeoutRef();
       console.error('[Movies] fetch failed:', error);
       if (timedOut) {
-        setMoviesError(`The request timed out on a slow network. ${error?.message || ''}`.trim());
+        setMoviesError(error?.message ? `The request timed out on a slow network. ${error.message}` : 'The request timed out on a slow network.');
       } else if (error?.name === 'AbortError') {
-        setMoviesError(`The request was canceled. ${error?.message || ''}`.trim());
+        setMoviesError(error?.message ? `The request was canceled. ${error.message}` : 'The request was canceled.');
       } else {
         setMoviesError(error?.message || 'Could not load movies right now. Please try again in a moment.');
       }
@@ -166,7 +156,7 @@ const App = () => {
     setTrendingError('');
     console.log('[Trending] start request');
     try {
-      const data = await fetchTmdb('/trending/movie/day', {}, controller.signal);
+      const data = await fetchApi('/api/trending', {}, controller.signal);
       const results = Array.isArray(data?.results) ? data.results : [];
 
       console.log('[Trending] raw response:', data);
@@ -179,9 +169,9 @@ const App = () => {
       const timedOut = didTimeoutRef();
       console.error('[Trending] fetch failed:', error);
       if (timedOut) {
-        setTrendingError(`Trending movies took too long to load. ${error?.message || ''}`.trim());
+        setTrendingError(error?.message ? `Trending movies took too long to load. ${error.message}` : 'Trending movies took too long to load.');
       } else if (error?.name === 'AbortError') {
-        setTrendingError(`Trending request was canceled. ${error?.message || ''}`.trim());
+        setTrendingError(error?.message ? `Trending request was canceled. ${error.message}` : 'Trending request was canceled.');
       } else {
         setTrendingError(error?.message || 'Trending movies are temporarily unavailable.');
       }
@@ -203,7 +193,7 @@ const App = () => {
   };
 
   useEffect(() => {
-  fetchMovies(debouncedSearchTerm);
+    fetchMovies(debouncedSearchTerm);
   }, [debouncedSearchTerm]);
 
   useEffect(() => {
@@ -245,12 +235,14 @@ const App = () => {
                 <li key={movie?.id ?? `trending-${index}`}>
                   <p>{index + 1}</p>
                   <img
-                    src={
-                      movie?.poster_path
-                        ? `https://image.tmdb.org/t/p/w500/${movie.poster_path}`
-                        : '/no-movie.png'
-                    }
+                    src={buildPosterSrc(movie?.poster_path)}
                     alt={movie?.title || 'Trending movie'}
+                    loading="lazy"
+                    decoding="async"
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = '/no-movie.png';
+                    }}
                   />
                 </li>
               ))}

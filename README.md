@@ -14,7 +14,7 @@ Live Demo → [https://cinevora-movies.vercel.app/]
 - 📊 Search analytics tracking with Appwrite
 - 🌙 Modern dark UI design
 - 📱 Fully responsive across devices
-- 🚀 Deployed on Netlify
+- 🚀 Deployed on Vercel
 
 ---
 
@@ -25,7 +25,7 @@ Live Demo → [https://cinevora-movies.vercel.app/]
 - Tailwind CSS
 - TMDB API
 - Appwrite
-- Netlify
+- Vercel
 
 ---
 
@@ -72,7 +72,13 @@ For Vercel production deploys, add this environment variable in Project Settings
 VITE_TMDB_API_KEY=your_tmdb_read_access_token_v4
 ```
 
-The app now calls TMDB directly from the client using the Bearer token header, so the Vercel build must be redeployed after setting the variable.
+The app now uses Vercel API routes (`/api/movies` and `/api/trending`) as a backend proxy. After setting the env var, redeploy the Vercel app.
+
+If you want to run the `/api` routes locally, use Vercel's dev server instead of plain Vite:
+
+```bash
+vercel dev
+```
 
 ## Start development server:
 
@@ -91,8 +97,6 @@ npm run build
 This project uses Appwrite to:
 
 - Track search counts
-
-- Store trending movie metrics
 
 Make sure you:
 
@@ -132,7 +136,7 @@ You can also open an issue to discuss ideas.
 
 ## 🚀 Deployment
 
-The project is deployed using Netlify.
+The project is deployed using Vercel.
 
 To deploy:
 
@@ -140,7 +144,7 @@ To deploy:
 npm run build
 ```
 
-Then upload the dist folder to Netlify.
+Then deploy the project on Vercel.
 
 ## 👨‍💻 Author
 
