@@ -10,6 +10,7 @@ const API_BASE_URL = 'https://api.themoviedb.org/3';
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 console.log('ENV TOKEN:', import.meta.env.VITE_TMDB_API_KEY);
 const REQUEST_TIMEOUT_MS = 8000;
+const DEBUG_HARDCODED_BEARER_TOKEN = 'Bearer YOUR_TOKEN';
 
 
 
@@ -50,6 +51,7 @@ const App = () => {
 
   const fetchTmdb = async (path, query = {}, signal) => {
     const searchParams = new URLSearchParams();
+    const authToken = API_KEY || DEBUG_HARDCODED_BEARER_TOKEN.replace(/^Bearer\s+/i, '');
 
     Object.entries(query).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
@@ -61,13 +63,13 @@ const App = () => {
       method: 'GET',
       headers: {
         accept: 'application/json',
-        Authorization: `Bearer ${API_KEY}`,
+        Authorization: `Bearer ${authToken}`,
       },
       signal,
     };
 
     if (!API_KEY) {
-      throw new Error('VITE_TMDB_API_KEY is missing. Set it in Vercel Project Settings > Environment Variables and redeploy.');
+      console.warn('[TMDB] VITE_TMDB_API_KEY is missing; using DEBUG_HARDCODED_BEARER_TOKEN fallback for this request.');
     }
 
     const endpoint = `${API_BASE_URL}${path}?${searchParams.toString()}`;
@@ -92,7 +94,9 @@ const App = () => {
 
     if (!response.ok) {
       console.error('[TMDB] Failed response body:', data || responseText);
-      throw new Error(data?.error || data?.status_message || `TMDB request failed (${response.status})`);
+      throw new Error(
+        `${path} failed with status ${response.status}${data?.status_message ? `: ${data.status_message}` : ''}`
+      );
     }
 
     return data;
@@ -117,7 +121,7 @@ const App = () => {
     try {
       const data = query
         ? await fetchTmdb('/search/movie', { query }, controller.signal)
-        : await fetchTmdb('/discover/movie', { sort_by: 'popularity.desc' }, controller.signal);
+        : await fetchTmdb('/movie/popular', {}, controller.signal);
       const results = Array.isArray(data?.results) ? data.results : [];
 
       if (requestId !== latestRequestRef.current) return;
@@ -139,11 +143,11 @@ const App = () => {
       const timedOut = didTimeoutRef();
       console.error('[Movies] fetch failed:', error);
       if (timedOut) {
-        setMoviesError('The request timed out on a slow network. Please retry.');
+        setMoviesError(`The request timed out on a slow network. ${error?.message || ''}`.trim());
       } else if (error?.name === 'AbortError') {
-        setMoviesError('The request was canceled. Please retry.');
+        setMoviesError(`The request was canceled. ${error?.message || ''}`.trim());
       } else {
-        setMoviesError('Could not load movies right now. Please try again in a moment.');
+        setMoviesError(error?.message || 'Could not load movies right now. Please try again in a moment.');
       }
     } finally {
       window.clearTimeout(timeoutId);
@@ -175,11 +179,11 @@ const App = () => {
       const timedOut = didTimeoutRef();
       console.error('[Trending] fetch failed:', error);
       if (timedOut) {
-        setTrendingError('Trending movies took too long to load. Please retry.');
+        setTrendingError(`Trending movies took too long to load. ${error?.message || ''}`.trim());
       } else if (error?.name === 'AbortError') {
-        setTrendingError('Trending request was canceled. Please retry.');
+        setTrendingError(`Trending request was canceled. ${error?.message || ''}`.trim());
       } else {
-        setTrendingError('Trending movies are temporarily unavailable.');
+        setTrendingError(error?.message || 'Trending movies are temporarily unavailable.');
       }
     }
     finally {
