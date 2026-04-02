@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
     "appwrite": "^22.4.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

@@ -11,6 +11,7 @@ const client = new Client()
 const database = new Databases(client);
 
 export const updateSearchCount = async (searchTerm, movie) => {
+  if (!searchTerm || !movie?.id) return;
 
   try {
     const result = await database.listDocuments(DATABASE_ID, COLLECTION_ID,[
@@ -28,7 +29,9 @@ export const updateSearchCount = async (searchTerm, movie) => {
         searchTerm,
           count: 1,
           movie_id: movie.id,
-          poster_url: `https://images.tmdb.org/t/p/w500${movie.poster_path}`,
+          poster_url: movie?.poster_path
+            ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+            : '/no-movie.png',
       })
     }
   } catch(error){
@@ -42,8 +45,9 @@ export const getTrendingMovies = async () => {
       Query.limit(5),
       Query.orderDesc("count")
     ])
-    return result.documents;
+    return Array.isArray(result?.documents) ? result.documents : [];
   } catch(error){
     console.log(error);
+    return [];
   }
 }
