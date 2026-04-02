@@ -6,6 +6,7 @@ import { useDebounce } from 'react-use'
 import { updateSearchCount } from './appwrite.js';
 
 const API_BASE_URL = 'https://api.themoviedb.org/3';
+const TMDB_PROXY_PATH = '/.netlify/functions/tmdb';
 
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
@@ -16,8 +17,54 @@ const App = () => {
   const [movieList, setMovieList] = useState([]);
   const [trendingMovies, setTrendingMovies] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [moviesError, setMoviesError] = useState('');
+  const [trendingError, setTrendingError] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const latestRequestRef = useRef(0);
+
+  const fetchTmdb = async (path, query = {}) => {
+    const isProd = import.meta.env.PROD;
+    const searchParams = new URLSearchParams();
+
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        searchParams.set(key, value);
+      }
+    });
+
+    let endpoint = '';
+
+    if (isProd) {
+      searchParams.set('path', path);
+      endpoint = `${TMDB_PROXY_PATH}?${searchParams.toString()}`;
+    } else {
+      if (!API_KEY) {
+        throw new Error('VITE_TMDB_API_KEY is missing in local environment.');
+      }
+      searchParams.set('api_key', API_KEY);
+      endpoint = `${API_BASE_URL}${path}?${searchParams.toString()}`;
+    }
+
+    console.log(`[TMDB] Request -> ${endpoint}`);
+    const response = await fetch(endpoint);
+    const responseText = await response.text();
+
+    let data = null;
+    try {
+      data = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      data = null;
+    }
+
+    console.log(`[TMDB] Response status ${response.status} for ${path}`);
+
+    if (!response.ok) {
+      console.error('[TMDB] Failed response body:', data || responseText);
+      throw new Error(data?.error || data?.status_message || `TMDB request failed (${response.status})`);
+    }
+
+    return data;
+  };
 
   useDebounce(
     () => {
@@ -29,18 +76,11 @@ const App = () => {
   const fetchMovies = async (query = '') => {
     const requestId = ++latestRequestRef.current;
     setIsLoading(true);
+    setMoviesError('');
     try {
-      const endpoint = query
-        ? `${API_BASE_URL}/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}`
-        : `${API_BASE_URL}/discover/movie?api_key=${API_KEY}&sort_by=popularity.desc`;
-
-      const response = await fetch(endpoint);
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch movies');
-      }
-
-      const data = await response.json();
+      const data = query
+        ? await fetchTmdb('/search/movie', { query })
+        : await fetchTmdb('/discover/movie', { sort_by: 'popularity.desc' });
       const results = Array.isArray(data?.results) ? data.results : [];
 
       if (requestId !== latestRequestRef.current) return;
@@ -58,8 +98,9 @@ const App = () => {
     } catch (error) {
       if (requestId !== latestRequestRef.current) return;
 
-      console.error(`Error fetching movies : ${error}`);
-      // Keep the last successful results on-screen if a later request fails.
+      console.error('Error fetching movies:', error);
+      setMovieList([]);
+      setMoviesError('Could not load movies right now. Please try again in a moment.');
     } finally {
       if (requestId !== latestRequestRef.current) return;
       setIsLoading(false);
@@ -67,15 +108,9 @@ const App = () => {
   }
 
   const loadTrendingMovies = async () => {
+    setTrendingError('');
     try {
-      const endpoint = `${API_BASE_URL}/trending/movie/day?api_key=${API_KEY}`;
-      const response = await fetch(endpoint);
-
-      if (!response.ok) {
-        throw new Error(`Trending fetch failed: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await fetchTmdb('/trending/movie/day');
       const results = Array.isArray(data?.results) ? data.results : [];
 
       console.log('[Trending] raw response:', data);
@@ -84,8 +119,9 @@ const App = () => {
       // TMDB response shape is { results: [...] }.
       setTrendingMovies(results);
     } catch (error) {
-      console.log(`Error fetching trending movies ${error}`);
+      console.error('Error fetching trending movies:', error);
       setTrendingMovies([]);
+      setTrendingError('Trending movies are temporarily unavailable.');
     }
   }
 
@@ -145,11 +181,17 @@ const App = () => {
           </section>
         )}
 
+        {trendingError && (
+          <p className="text-light-200 mb-4">{trendingError}</p>
+        )}
+
         <section className="all-movies">
           <h2>All Movies</h2>
 
           {isLoading ? (
             <Spinner />
+          ) : moviesError ? (
+            <p className="text-red-500">{moviesError}</p>
           ) : (
             movieList?.length > 0 ? (
               <ul>

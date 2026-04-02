@@ -66,6 +66,14 @@ VITE_APPWRITE_DATABASE_ID=your_database_id
 VITE_APPWRITE_COLLECTION_ID=your_collection_id
 ```
 
+For Netlify production deploys, add this server-side environment variable in Netlify Site Settings:
+
+```bash
+TMDB_API_KEY=your_tmdb_api_key
+```
+
+The app uses a Netlify function (`netlify/functions/tmdb.js`) in production, so TMDB requests are proxied server-side.
+
 ## Start development server:
 
 ```bash
