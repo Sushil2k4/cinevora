@@ -3,7 +3,7 @@ import Search from './components/Search.jsx';
 import Spinner from './components/Spinner.jsx';
 import MovieCard from './components/MovieCard.jsx';
 import { useDebounce } from 'react-use'
-import { getTrendingMovies, updateSearchCount } from './appwrite.js';
+import { updateSearchCount } from './appwrite.js';
 
 const API_BASE_URL = 'https://api.themoviedb.org/3';
 
@@ -67,10 +67,23 @@ const App = () => {
   }
 
   const loadTrendingMovies = async () => {
-    try{
-      const movies = await getTrendingMovies();
-      setTrendingMovies(Array.isArray(movies) ? movies : []);
-    } catch(error){
+    try {
+      const endpoint = `${API_BASE_URL}/trending/movie/day?api_key=${API_KEY}`;
+      const response = await fetch(endpoint);
+
+      if (!response.ok) {
+        throw new Error(`Trending fetch failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const results = Array.isArray(data?.results) ? data.results : [];
+
+      console.log('[Trending] raw response:', data);
+      console.log('[Trending] results length:', results.length);
+
+      // TMDB response shape is { results: [...] }.
+      setTrendingMovies(results);
+    } catch (error) {
       console.log(`Error fetching trending movies ${error}`);
       setTrendingMovies([]);
     }
@@ -81,8 +94,21 @@ const App = () => {
   }, [debouncedSearchTerm]);
 
   useEffect(() => {
+    console.log('[Trending] useEffect loadTrendingMovies running');
     loadTrendingMovies();
   }, []);
+
+  useEffect(() => {
+    if (typeof trendingMovies === 'undefined') {
+      console.log('[Trending] state is undefined');
+    } else if (Array.isArray(trendingMovies) && trendingMovies.length === 0) {
+      console.log('[Trending] state is empty array');
+    } else if (Array.isArray(trendingMovies)) {
+      console.log('[Trending] state is populated array');
+    } else {
+      console.log('[Trending] state has unexpected shape:', trendingMovies);
+    }
+  }, [trendingMovies]);
 
   return (
     <main>
@@ -97,15 +123,22 @@ const App = () => {
           <Search searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
         </header>
 
-        {trendingMovies?.length > 0 && (
+        {Array.isArray(trendingMovies) && trendingMovies.length > 0 && (
           <section className="trending">
             <h2>Trending Movies</h2>
 
             <ul>
-              {trendingMovies?.map((movie, index) => (
-                <li key={movie?.$id ?? `${movie?.movie_id ?? 'movie'}-${index}`}>
+              {trendingMovies.map((movie, index) => (
+                <li key={movie?.id ?? `trending-${index}`}>
                   <p>{index + 1}</p>
-                  <img src={movie?.poster_url || '/no-movie.png'} alt={movie?.title || 'Trending movie'} />
+                  <img
+                    src={
+                      movie?.poster_path
+                        ? `https://image.tmdb.org/t/p/w500/${movie.poster_path}`
+                        : '/no-movie.png'
+                    }
+                    alt={movie?.title || 'Trending movie'}
+                  />
                 </li>
               ))}
             </ul>
